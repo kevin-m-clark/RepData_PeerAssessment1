@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="UTF-8">
+    <title>Repdata peerassessment1 by kevin-m-clark</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" type="text/css" href="stylesheets/normalize.css" media="screen">
+    <link href='https://fonts.googleapis.com/css?family=Open+Sans:400,700' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen">
+    <link rel="stylesheet" type="text/css" href="stylesheets/github-light.css" media="screen">
+  </head>
+  <body>
+    <section class="page-header">
+      <h1 class="project-name">Repdata peerassessment1</h1>
+      <h2 class="project-tagline">Peer Assessment 1 for Reproducible Research</h2>
+      <a href="https://github.com/kevin-m-clark/RepData_PeerAssessment1" class="btn">View on GitHub</a>
+      <a href="https://github.com/kevin-m-clark/RepData_PeerAssessment1/zipball/master" class="btn">Download .zip</a>
+      <a href="https://github.com/kevin-m-clark/RepData_PeerAssessment1/tarball/master" class="btn">Download .tar.gz</a>
+    </section>
+
+    <section class="main-content">
+      <p>Loading and preprocessing the data</p>
+
+<p>Introduction</p>
+
+<p>It is now possible to collect a large amount of data about personal movement using activity monitoring devices such as a Fitbit, Nike Fuelband, or Jawbone Up. These type of devices are part of the "quantified self" movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. But these data remain under-utilized both because the raw data are hard to obtain and there is a lack of statistical methods and software for processing and interpreting the data.</p>
+
+<p>This assignment makes use of data from a personal activity monitoring device. This device collects data at 5 minute intervals through out the day. The data consists of two months of data from an anonymous individual collected during the months of October and November, 2012 and include the number of steps taken in 5 minute intervals each day.</p>
+
+<p>Data</p>
+
+<p>The data for this assignment can be downloaded from the course web site: Dataset: Activity monitoring data
+ The variables included in this dataset are: steps: Number of steps taking in a 5-minute interval (missing values are coded as NA) date: The date on which the measurement was taken in YYYY-MM-DD format interval: Identifier for the 5-minute interval in which measurement was taken The dataset is stored in a comma-separated-value (CSV) file and there are a total of 17,568 observations in this dataset.</p>
+
+<p>Conventions used in this document:</p>
+
+<p>Variable names from a dataset are in all capital letters.</p>
+
+<p>Requirements</p>
+
+<p>Reproducing this analysis requires use of the following R packages</p>
+
+<p>library(dplyr);
+library(ggplot2);
+library(mice);
+library(knitr);
+library(chron);
+library(scales);</p>
+
+<p>Load Raw Data:</p>
+
+<h1>
+<a id="helper-function-to-get-data" class="anchor" href="#helper-function-to-get-data" aria-hidden="true"><span class="octicon octicon-link"></span></a>helper function to get data</h1>
+
+<p>getData &lt;- function(url, zipName, dataFileName){
+  print(paste("loading data file: ", dataFileName));
+  tryCatch(
+    {</p>
+
+<pre><code>  #check if data file already exists
+  if(file.exists(dataFileName)){
+    print(paste("ready to use: ", dataFileName));
+    return();
+  }
+  else{
+    print(paste(dataFileName, " does not exist, attempting to get data from: ", zipName));
+  }
+
+  #if data file does not exist look for an archive that should contain it
+  #or download the archive
+  if(!file.exists(zipName)){
+    print(paste(zipName, " does not exist, attempting to get data from: ", url));
+    download.file(dataURL, destfile = zipName);
+    print(paste(zipName, " successfully downloaded from: ", url));
+  }
+
+  #if the archive is found try to unpack it
+  if(file.exists(zipName)){
+    print(paste("unzipping: ", zipName));
+    unzip(zipName)
+    print(paste(zipName, " successfully unzipped"));
+  }
+  else{
+    stop(paste(zipName, " does not exist, check URL and zip name for accuracy"));
+  }
+
+  #check if data file was in the archive
+  if(!file.exists(dataFileName)){
+    stop(paste("File not found: ", dataFileName))
+  }
+
+}, 
+warning = function(w) {print(w);}, 
+error = function(e) {print(e);}
+</code></pre>
+
+<p>);
+}</p>
+
+<p>dataURL="<a href="https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip">https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip</a>"
+zipName &lt;- "repdata-data-activity.zip"
+dataFileName &lt;- "activity.csv";</p>
+
+<h1>
+<a id="download-and-unzip-data-if-necessary" class="anchor" href="#download-and-unzip-data-if-necessary" aria-hidden="true"><span class="octicon octicon-link"></span></a>download and unzip data if necessary</h1>
+
+<p>getData(zipName, zipName, dataFileName);</p>
+
+<h1>
+<a id="read-raw-data" class="anchor" href="#read-raw-data" aria-hidden="true"><span class="octicon octicon-link"></span></a>read raw data</h1>
+
+<p>rawActivityData &lt;- read.csv(dataFileName, header=TRUE);</p>
+
+<p>Perform exploratory analysis on the raw data.</p>
+
+<p>Basic summary views:</p>
+
+<p>dim(rawActivityData);
+str(rawActivityData);
+summary(rawActivityData);
+head(rawActivityData);</p>
+
+<p>The STEPS variable contains  r sum(is.na(rawActivityData) == TRUE)  NA entries,
+ we'll need to look at the distribution of NA values.</p>
+
+<p>The DATES variable appears to have reasonable entries,
+ we'll need to verify the dates are valid and data is collected
+ in the same manner for each date.</p>
+
+<p>The INTERVAL variable contains cryptic values,
+ we'll need to interpret the meaning of entries in this variable.</p>
+
+<p>Segment raw data by DATE to ensure the date values represent valid dates,
+ and each DATE has the same number of INTERVAL values which are measured
+ by the same intervals:</p>
+
+<h1>
+<a id="ensure-date-variable-contains-valid-date-values-this-function-will-fail" class="anchor" href="#ensure-date-variable-contains-valid-date-values-this-function-will-fail" aria-hidden="true"><span class="octicon octicon-link"></span></a>ensure DATE variable contains valid date values, this function will fail</h1>
+
+<h1>
+<a id="if-some-entry-is-not-a-valid-date" class="anchor" href="#if-some-entry-is-not-a-valid-date" aria-hidden="true"><span class="octicon octicon-link"></span></a>if some entry is not a valid date</h1>
+
+<p>validDates &lt;- data.frame(dates = as.Date(rawActivityData$date));</p>
+
+<h1>
+<a id="check-the-range-of-dates-for-validity" class="anchor" href="#check-the-range-of-dates-for-validity" aria-hidden="true"><span class="octicon octicon-link"></span></a>check the range of dates for validity</h1>
+
+<p>range(validDates$dates);</p>
+
+<h1>
+<a id="segment-data-by-date" class="anchor" href="#segment-data-by-date" aria-hidden="true"><span class="octicon octicon-link"></span></a>segment data by DATE</h1>
+
+<p>dataByDate &lt;- split(rawActivityData, rawActivityData$date);  </p>
+
+<h1>
+<a id="check-number-of-dates" class="anchor" href="#check-number-of-dates" aria-hidden="true"><span class="octicon octicon-link"></span></a>check number of dates</h1>
+
+<p>dateCount &lt;- length(dataByDate);</p>
+
+<h1>
+<a id="make-sure-all-dates-have-the-same-number-of-intervals" class="anchor" href="#make-sure-all-dates-have-the-same-number-of-intervals" aria-hidden="true"><span class="octicon octicon-link"></span></a>make sure all dates have the same number of intervals</h1>
+
+<p>rowCountByDate &lt;- sapply(dataByDate, function(x) nrow(x));
+allCountsEqual &lt;- all(rowCountByDate == rowCountByDate[1]);</p>
+
+<h1>
+<a id="test-if-each-date-has-the-exact-same-intervals" class="anchor" href="#test-if-each-date-has-the-exact-same-intervals" aria-hidden="true"><span class="octicon octicon-link"></span></a>test if each date has the exact same intervals</h1>
+
+<p>intervals &lt;- lapply(dataByDate, function(x) as.data.frame(x)[,3]);
+intervalComparison &lt;- all(unlist(intervals[1]) == unlist(intervals));</p>
+
+<p>We see all DATE entries represent valid dates,
+ the range of dates  r range(validDates$dates)[1]  --  r range(validDates$dates)[2]  matches the data description,
+ and the data contains  r dateCount  dates.
+ Each date contains  r rowCountByDate[1]  observations,
+ and each DATE is segmented by the same INTERVAL values.</p>
+
+<p>According the description of the raw data, each
+ INTERVAL represents 5 minutes of time. So given  r rowCountByDate[1] 
+ observations per day we account for  r 5 * rowCountByDate[1] / 60  hours per day.</p>
+
+<h1>
+<a id="do-the-math-to-show-range-of-intervals-equates-to-24-hours-per-day" class="anchor" href="#do-the-math-to-show-range-of-intervals-equates-to-24-hours-per-day" aria-hidden="true"><span class="octicon octicon-link"></span></a>do the math to show range of intervals equates to 24 hours per day</h1>
+
+<p>5 * 288 / 60</p>
+
+<p>The data contains  r length(unique(rawActivityData$interval))  unique intervals.
+ visually examine the INTERVAL values to interpret their meaning:</p>
+
+<p>unique(rawActivityData$interval);</p>
+
+<p>Interesting, rather than sequentially numbering the
+ the intervals 1- r rowCountByDate[1]  the INTERVAL values equate to 24
+ hour time in the format hhmm, with 0 as midnight -- the minutes change
+ in increments of 5.</p>
+
+<p>Examine the distribution of NA values:</p>
+
+<p>naCounts &lt;- sapply(dataByDate, function(x) sum(is.na(as.data.frame(x)[,1])==TRUE));
+tnaCounts &lt;- table(naCounts);
+tnaCounts</p>
+
+<p>This shows each day contains either 0 or 288 NA values for the STEPS variable,
+ with  r as.vector(tnaCounts[2])  dates which contain only NA values for STEPS.
+ The missing (NA) STEP entries account for  r round(100 * sum(is.na(rawActivityData) == TRUE) / nrow(rawActivityData), 2) % of the data.</p>
+
+<p>Other than the abundance of NA values the data looks pretty clean,
+ so let's get to work.</p>
+
+<p>Q &amp; A</p>
+
+<p>What is mean total number of steps taken per day?tag: h2 -&gt; h3
+1.Calculate total number of steps taken each day</p>
+
+<p>sumStepsPerDate &lt;- rawActivityData[complete.cases(rawActivityData),]  %&gt;% 
+                   group_by(date) %&gt;% 
+                   summarise(totalsteps=sum(steps));</p>
+
+<h1>
+<a id="quick-exam-of-summary-data" class="anchor" href="#quick-exam-of-summary-data" aria-hidden="true"><span class="octicon octicon-link"></span></a>quick exam of summary data</h1>
+
+<p>str(sumStepsPerDate);
+head(sumStepsPerDate);
+dim(sumStepsPerDate);
+1.Make a histogram of the total number of steps taken each day.</p>
+
+<p>ggplot(data=sumStepsPerDate, aes(sumStepsPerDate$totalsteps)) + 
+  geom_histogram(breaks=seq(0, max(sumStepsPerDate$totalsteps), 
+                            by = max(sumStepsPerDate$totalsteps) / length(unique(sumStepsPerDate$date))), 
+                 col="red", 
+                 fill="green", 
+                 alpha = .2) + 
+  xlab("Steps per Day") +
+  ylab("Count of Days with X Steps per Day") +
+  ggtitle("Sum of Steps Per Day (NA Removed)");
+1.Calculate and report the mean and median of the total number of steps taken per day.</p>
+
+<p>meanSumStepsPerDay &lt;- mean(sumStepsPerDate$totalsteps);
+medianSumStepsPerDay &lt;- median(sumStepsPerDate$totalsteps);</p>
+
+<p>Mean total steps taken per day (rounded):  r as.character(round(meanSumStepsPerDay)) 
+ Median of total steps taken per day:  r medianSumStepsPerDay  </p>
+
+<p>What is the average daily activity pattern?tag: h2 -&gt; h3
+1.Make a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis).</p>
+
+<h1>
+<a id="compute-mean-steps-per-5-minute-interval" class="anchor" href="#compute-mean-steps-per-5-minute-interval" aria-hidden="true"><span class="octicon octicon-link"></span></a>compute mean steps per 5 minute interval</h1>
+
+<p>meanStepsPerInterval &lt;- rawActivityData[complete.cases(rawActivityData),]  %&gt;% 
+                        group_by(interval) %&gt;% 
+                        summarise(meansteps=mean(steps));</p>
+
+<p>formattedIntervals &lt;- sprintf("%04d", meanStepsPerInterval$interval);</p>
+
+<p>splitCodes &lt;- paste(substr(formattedIntervals,1,2) , ":" , 
+                    substr(formattedIntervals,3,4), ":", "00", 
+                    sep="");</p>
+
+<h1>
+<a id="splittimes---timessplitcodes" class="anchor" href="#splittimes---timessplitcodes" aria-hidden="true"><span class="octicon octicon-link"></span></a>splitTimes &lt;- times(splitCodes);</h1>
+
+<p>posixIntervals &lt;- as.POSIXct(splitCodes, format="%H:%M:%S")</p>
+
+<h1>
+<a id="create-line-plot---looks-like-the-max-mean-interval-is-around-200-steps" class="anchor" href="#create-line-plot---looks-like-the-max-mean-interval-is-around-200-steps" aria-hidden="true"><span class="octicon octicon-link"></span></a>create line plot - looks like the max mean interval is around 200 steps</h1>
+
+<p>ggplot(NULL, aes(posixIntervals, meanStepsPerInterval$meansteps)) + 
+  geom_line() +
+  xlab("Interval") +
+  ylab("Total Steps per Interval") +
+  ggtitle("Mean Total Steps Per Interval (NA Removed)") +
+  scale_x_datetime(labels=date_format("%H:%M")) +
+  theme(axis.text.x = element_text(angle = -90, hjust = 1));</p>
+
+<p>1.Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?</p>
+
+<h1>
+<a id="compute-max-average-interval" class="anchor" href="#compute-max-average-interval" aria-hidden="true"><span class="octicon octicon-link"></span></a>compute max average interval</h1>
+
+<p>maxStepsPerInterval = max(meanStepsPerInterval$meansteps);</p>
+
+<p>maxInterval &lt;- meanStepsPerInterval %&gt;% 
+               filter(meansteps == maxStepsPerInterval) %&gt;%
+               select(interval);</p>
+
+<p>Interval  r maxInterval  contains the maximum average steps across all days (rounded):  r as.character(round(maxStepsPerInterval, 2)) .</p>
+
+<p>Imputing missing valuestag: h2 -&gt; h3
+1.Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with NAs)</p>
+
+<p>Previous NA analysis shows  r as.vector(tnaCounts[2])  dates contain only NA values for STEPS.</p>
+
+<h1>
+<a id="compute-number-of-na-values-in-raw-data" class="anchor" href="#compute-number-of-na-values-in-raw-data" aria-hidden="true"><span class="octicon octicon-link"></span></a>compute number of NA values in raw data</h1>
+
+<p>table(is.na(rawActivityData));</p>
+
+<h1>
+<a id="2304-total-nas-in-raw-data" class="anchor" href="#2304-total-nas-in-raw-data" aria-hidden="true"><span class="octicon octicon-link"></span></a>2304 total NAs in raw data</h1>
+
+<h1>
+<a id="which-columns-contain-na-values" class="anchor" href="#which-columns-contain-na-values" aria-hidden="true"><span class="octicon octicon-link"></span></a>which columns contain NA values?</h1>
+
+<p>summary(rawActivityData);</p>
+
+<h1>
+<a id="looks-like-only-the-steps-variable-contains-na-values" class="anchor" href="#looks-like-only-the-steps-variable-contains-na-values" aria-hidden="true"><span class="octicon octicon-link"></span></a>looks like only the steps variable contains NA values</h1>
+
+<h1>
+<a id="confirm-the-2304-nas-are-one-per-row" class="anchor" href="#confirm-the-2304-nas-are-one-per-row" aria-hidden="true"><span class="octicon octicon-link"></span></a>confirm the 2304 NAs are one per row</h1>
+
+<p>table(complete.cases(rawActivityData));</p>
+
+<h1>
+<a id="what-percent-of-data-is-missing-from-the-steps-variable" class="anchor" href="#what-percent-of-data-is-missing-from-the-steps-variable" aria-hidden="true"><span class="octicon octicon-link"></span></a>what percent of data is missing from the steps variable?</h1>
+
+<p>pctNA &lt;- sum(is.na(rawActivityData$steps))/length(rawActivityData$steps)*100;</p>
+
+<p>Further analysis of the NA values shows all 2304 NAs appear in the STEPS field, which comprises  r round(pctNA,2) % of the data in this field.
+1.Devise a strategy for filling in all of the missing values in the dataset.</p>
+
+<p>Use the MICE package to impute missing data!
+ It's definitely more interesting then computing more means, etc...
+1.Create a new dataset that is equal to the original dataset but with the missing data filled in.</p>
+
+<h1>
+<a id="show-the-mice-summary-of-the-raw-data" class="anchor" href="#show-the-mice-summary-of-the-raw-data" aria-hidden="true"><span class="octicon octicon-link"></span></a>show the MICE summary of the raw data,</h1>
+
+<h1>
+<a id="confirming-steps-variable-contains-2304-na-values" class="anchor" href="#confirming-steps-variable-contains-2304-na-values" aria-hidden="true"><span class="octicon octicon-link"></span></a>confirming STEPS variable contains 2304 NA values</h1>
+
+<p>md.pattern(rawActivityData);</p>
+
+<h1>
+<a id="impute-missing-values----this-takes-a-minute-or-two-depending-on-values-for-m-and-maxit" class="anchor" href="#impute-missing-values----this-takes-a-minute-or-two-depending-on-values-for-m-and-maxit" aria-hidden="true"><span class="octicon octicon-link"></span></a>impute missing values -- this takes a minute or two depending on values for m and maxit.</h1>
+
+<p>tempData &lt;- mice(rawActivityData, m=5, maxit=10, meth='pmm', seed=500);
+imputedActivityData &lt;- complete(tempData,1);</p>
+
+<h1>
+<a id="show-summary-of-dataframe-with-imputed-values-for-steps" class="anchor" href="#show-summary-of-dataframe-with-imputed-values-for-steps" aria-hidden="true"><span class="octicon octicon-link"></span></a>show summary of dataframe with imputed values for steps</h1>
+
+<p>summary(imputedActivityData);</p>
+
+<p>1.Make a histogram of the total number of steps taken each day and Calculate and report the mean and median total number of steps taken per day. Do these values differ from the estimates from the first part of the assignment? What is the impact of imputing missing data on the estimates of the total daily number of steps?</p>
+
+<h1>
+<a id="compute-sum-of-steps-for-each-date" class="anchor" href="#compute-sum-of-steps-for-each-date" aria-hidden="true"><span class="octicon octicon-link"></span></a>compute sum of steps for each date</h1>
+
+<p>sumImputedStepsPerDate &lt;- imputedActivityData  %&gt;% 
+                          group_by(date) %&gt;% 
+                          summarise(totalsteps=sum(steps));</p>
+
+<p>ggplot(data=sumImputedStepsPerDate, aes(sumImputedStepsPerDate$totalsteps)) + 
+  geom_histogram(breaks=seq(0, max(sumImputedStepsPerDate$totalsteps), 
+                            by = max(sumImputedStepsPerDate$totalsteps) / length(unique(sumImputedStepsPerDate$date))), 
+                 col="red", 
+                 fill="green", 
+                 alpha = .2) + 
+  xlab("Steps per Day") +
+  ylab("Count of Days With X Steps per Day") +
+  ggtitle("Sum of Steps Per Day (NA Imputed)");</p>
+
+<p>meanSumImputedStepsPerDay &lt;- mean(sumImputedStepsPerDate$totalsteps);
+medianSumImputedStepsPerDay &lt;- median(sumImputedStepsPerDate$totalsteps);</p>
+
+<p>Mean steps per day change</p>
+
+<p>Mean total steps per day of data with NAs removed (rounded):  r as.character(round(meanSumStepsPerDay)) 
+ Mean total steps per day of imputed data (rounded):  r as.character(round(meanSumImputedStepsPerDay))  </p>
+
+<p>The difference between NA removed data and Imputed data is (rounded):  r round(meanSumStepsPerDay - meanSumImputedStepsPerDay) 
+ which equates to the perrcent change(rounded):  r round(100 * (meanSumStepsPerDay-meanSumImputedStepsPerDay) / (meanSumStepsPerDay+meanSumImputedStepsPerDay) / 2, 2)  </p>
+
+<p>Mean steps per day change</p>
+
+<p>Median total steps per day of r data with NAs removed:  r medianSumStepsPerDay 
+ Median total steps per day of imputed data:  r medianSumImputedStepsPerDay  </p>
+
+<p>The difference in NA removed data and Imputed data is:  r round(medianSumStepsPerDay - medianSumImputedStepsPerDay) 
+ which equates to the perrcent change:  r round(100 * (medianSumStepsPerDay-medianSumImputedStepsPerDay) / (medianSumStepsPerDay+medianSumImputedStepsPerDay) / 2, 2)  </p>
+
+<p>Graphical comparison of mean steps per interval: NAs removed vs. imputing values for NAs</p>
+
+<h1>
+<a id="impute-data-and-then-compare-mean-per-interval-between-na-removed-data-and-imputed-data" class="anchor" href="#impute-data-and-then-compare-mean-per-interval-between-na-removed-data-and-imputed-data" aria-hidden="true"><span class="octicon octicon-link"></span></a>impute data and then compare mean per interval between NA removed data and imputed data</h1>
+
+<h1>
+<a id="compute-mean-steps-per-interval-using-imputed-data" class="anchor" href="#compute-mean-steps-per-interval-using-imputed-data" aria-hidden="true"><span class="octicon octicon-link"></span></a>compute mean steps per interval using imputed data</h1>
+
+<p>meanImputedStepsPerInterval &lt;- imputedActivityData  %&gt;% 
+                               group_by(interval) %&gt;% 
+                               summarise(meansteps=mean(steps));</p>
+
+<p>formattedIntervals &lt;- sprintf("%04d", meanImputedStepsPerInterval$interval);</p>
+
+<p>splitCodes &lt;- paste(substr(formattedIntervals,1,2) , ":" , 
+                    substr(formattedIntervals,3,4), ":", "00", 
+                    sep="");</p>
+
+<h1>
+<a id="splittimes---timessplitcodes-1" class="anchor" href="#splittimes---timessplitcodes-1" aria-hidden="true"><span class="octicon octicon-link"></span></a>splitTimes &lt;- times(splitCodes);</h1>
+
+<p>posixIntervals &lt;- as.POSIXct(splitCodes, format="%H:%M:%S");</p>
+
+<h1>
+<a id="create-plot" class="anchor" href="#create-plot" aria-hidden="true"><span class="octicon octicon-link"></span></a>create plot</h1>
+
+<p>ggplot(NULL, aes(posixIntervals, meanStepsPerInterval$meansteps)) + 
+  geom_line(data = meanStepsPerInterval, aes(color="NA_Removed")) +
+  geom_step(data = meanImputedStepsPerInterval, aes(color="Imputed")) +
+  xlab("Interval") +
+  ylab("Total Steps per Interval") +
+  ggtitle("Mean Steps per Interval:  NA removed vs. Imputed") + 
+  scale_x_datetime(labels=date_format("%H:%M")) +
+  scale_colour_manual(name="Line Color", values=c(NA_Removed="black", Imputed="red")) +
+  theme(axis.text.x = element_text(angle = -90, hjust = 1));</p>
+
+<p>Graphical comparison of total steps per day: NAs removed vs. imputing values for NAs</p>
+
+<h1>
+<a id="compare-plot-of-sum-steps-per-date--raw-data-na-removed--vs-imputed-data" class="anchor" href="#compare-plot-of-sum-steps-per-date--raw-data-na-removed--vs-imputed-data" aria-hidden="true"><span class="octicon octicon-link"></span></a>compare plot of sum steps per date:  raw data (NA removed)  vs. imputed data</h1>
+
+<p>ggplot(NULL, aes(date, totalsteps, group=1)) + 
+  geom_line(data = sumStepsPerDate, aes(color="NA_Removed")) +
+  geom_step(data = sumImputedStepsPerDate, aes(color="Imputed")) +
+  xlab("Date") +
+  ylab("Total Steps per Interval") +
+  ggtitle("Total Steps per Day:  NA removed vs. Imputed")+
+  theme(axis.text.x = element_text(angle = -90, hjust = 1)) + 
+  scale_colour_manual(name="Line Color", values=c(NA_Removed="black", Imputed="red"));</p>
+
+<p>Are there differences in activity patterns between weekdays and weekends?tag: h2 -&gt; h3
+1.Create a new factor variable in the dataset with two levels - "weekday" and "weekend" indicating whether a given date is a weekday or weekend day.</p>
+
+<h1>
+<a id="add-weekendweekday-factor-to-the-data-set" class="anchor" href="#add-weekendweekday-factor-to-the-data-set" aria-hidden="true"><span class="octicon octicon-link"></span></a>add weekend/weekday factor to the data set</h1>
+
+<h1>
+<a id="that-contains-imputed-data" class="anchor" href="#that-contains-imputed-data" aria-hidden="true"><span class="octicon octicon-link"></span></a>that contains imputed data</h1>
+
+<p>imputedActivityData$day_type &lt;- as.factor(ifelse(grepl("Saturday|Sunday" , weekdays(as.Date( as.character(imputedActivityData$date)))), "weekend", "weekday"));</p>
+
+<h1>
+<a id="confirm-new-factor-column-appears-correct" class="anchor" href="#confirm-new-factor-column-appears-correct" aria-hidden="true"><span class="octicon octicon-link"></span></a>confirm new factor column appears correct</h1>
+
+<p>str(imputedActivityData);
+table(imputedActivityData$day_type)</p>
+
+<p>1.Make a panel plot containing a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis).</p>
+
+<h1>
+<a id="summarize-weekday-data-by-interval" class="anchor" href="#summarize-weekday-data-by-interval" aria-hidden="true"><span class="octicon octicon-link"></span></a>summarize weekday data by interval</h1>
+
+<p>imputedWeekDaysMeanStepsPerInterval &lt;- subset(imputedActivityData, day_type == "weekday") %&gt;% 
+                                       group_by(interval) %&gt;% 
+                                       summarise(meansteps=mean(steps));</p>
+
+<h1>
+<a id="summarize-weekend-data-by-interval" class="anchor" href="#summarize-weekend-data-by-interval" aria-hidden="true"><span class="octicon octicon-link"></span></a>summarize weekend data by interval</h1>
+
+<p>imputedWeekEndsMeanStepsPerInterval &lt;- subset(imputedActivityData, day_type == "weekend") %&gt;% 
+                                       group_by(interval) %&gt;% 
+                                       summarise(meansteps=mean(steps));</p>
+
+<p>formattedIntervals &lt;- sprintf("%04d", imputedWeekDaysMeanStepsPerInterval$interval);</p>
+
+<p>splitCodes &lt;- paste(substr(formattedIntervals,1,2) , ":" , 
+                    substr(formattedIntervals,3,4), ":", "00", 
+                    sep="");</p>
+
+<h1>
+<a id="splittimes---timessplitcodes-2" class="anchor" href="#splittimes---timessplitcodes-2" aria-hidden="true"><span class="octicon octicon-link"></span></a>splitTimes &lt;- times(splitCodes);</h1>
+
+<p>posixIntervals &lt;- as.POSIXct(splitCodes, format="%H:%M:%S");</p>
+
+<h1>
+<a id="2-panel-plot-off-weekends-vs-weekdays" class="anchor" href="#2-panel-plot-off-weekends-vs-weekdays" aria-hidden="true"><span class="octicon octicon-link"></span></a>2 panel plot off weekends vs. weekdays</h1>
+
+<p>par(mfrow=c(2,1));
+plot(x=posixIntervals, 
+     y=imputedWeekDaysMeanStepsPerInterval$meansteps, 
+     type="l",
+     xlab="Interval (Formatted in hhmm 24 hour time)", 
+     ylab="Mean Steps",
+     ylim=c(0, max(imputedWeekDaysMeanStepsPerInterval$meansteps,
+                   imputedWeekEndsMeanStepsPerInterval$meansteps)));
+     title(main="Weekday Intervals");</p>
+
+<p>plot(x=posixIntervals, 
+     y=imputedWeekEndsMeanStepsPerInterval$meansteps, 
+     type="l",
+     xlab="Interval", 
+     ylab="Mean Steps",
+     ylim=c(0, max(imputedWeekDaysMeanStepsPerInterval$meansteps,
+                   imputedWeekEndsMeanStepsPerInterval$meansteps)));
+     title(main="Weekend Intervals");</p>
+
+<p>This analysis is begging for a over-lay of the previous 2 graphs,
+ so here it is:</p>
+
+<p>plot(x=posixIntervals, 
+     y=imputedWeekDaysMeanStepsPerInterval$meansteps, 
+     type="l",
+     col="red",
+     xlab="Interval", 
+     ylab="Mean Steps",
+     ylim=c(0, max(imputedWeekDaysMeanStepsPerInterval$meansteps,
+                   imputedWeekEndsMeanStepsPerInterval$meansteps)));</p>
+
+<p>lines(x=posixIntervals, 
+      y=imputedWeekEndsMeanStepsPerInterval$meansteps,
+      col="black");</p>
+
+<p>title(main="Weekday vs Weekend Mean Steps per Interval");
+legend(x="topright", legend=c("Weekdays", "Weekends"),
+       col=c("red", "black"), lwd=1)</p>
+
+<p>This shows clear indication that people walk/run more during the morning of weekdays, while they walk/run more during the afternoon of weekends.</p>
+
+      <footer class="site-footer">
+        <span class="site-footer-owner"><a href="https://github.com/kevin-m-clark/RepData_PeerAssessment1">Repdata peerassessment1</a> is maintained by <a href="https://github.com/kevin-m-clark">kevin-m-clark</a>.</span>
+
+        <span class="site-footer-credits">This page was generated by <a href="https://pages.github.com">GitHub Pages</a> using the <a href="https://github.com/jasonlong/cayman-theme">Cayman theme</a> by <a href="https://twitter.com/jasonlong">Jason Long</a>.</span>
+      </footer>
+
+    </section>
+
+  
+  </body>
+</html>
